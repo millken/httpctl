@@ -31,7 +31,7 @@ func (h *Handler) queryDNS(domain string) (string, error) {
 	if len(in.Answer) == 0 {
 		return "", errors.New(" answer has empty")
 	}
-	if t, ok := in.Answer[0].(*dns.A); ok {
+	if t, ok := in.Answer[len(in.Answer)-1].(*dns.A); ok {
 		log.Printf("domain: %s => %s\n", domain, t.A.String())
 		value = t.A.String()
 		dnscache.SetStr(domain, value, 600)
