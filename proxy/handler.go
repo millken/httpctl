@@ -28,8 +28,11 @@ func (h *Handler) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 	}
 	tres, err := client.Do(req)
 	if err != nil {
-		panic(err)
+		log.Printf("http client : %s", err)
+		fmt.Fprintf(resp, "http client : %s", err)
+		return
 	}
+	defer tres.Body.Close()
 	for k, v := range tres.Header {
 		if len(v) < 2 {
 			resp.Header().Set(k, v[0])
@@ -37,7 +40,6 @@ func (h *Handler) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 			resp.Header().Set(k, strings.Join(v, ""))
 		}
 	}
-	defer tres.Body.Close()
 	if tres.StatusCode == 200 {
 		writer = h.archiver(resp, req)
 	} else {
@@ -53,6 +55,11 @@ func (h *Handler) archiver(resp http.ResponseWriter, req *http.Request) io.Write
 	if filename == "" {
 		filename = "index.html"
 	}
+	dir = fmt.Sprintf("archives/%s", dir)
+	dfile := fmt.Sprintf("%s%s", dir, filename)
+	if _, err := os.Stat(dfile); os.IsExist(err) {
+		return resp
+	}
 	stat, err := os.Stat(dir)
 	if os.IsNotExist(err) || !stat.IsDir() {
 		if err = os.MkdirAll(dir, 0644); err != nil {
@@ -62,8 +69,9 @@ func (h *Handler) archiver(resp http.ResponseWriter, req *http.Request) io.Write
 
 	}
 
-	fhandler, _ := os.Create(fmt.Sprintf("%s%s", dir, filename))
-	log.Printf("url: %s, dir: %s, filename: %s\n", url, dir, filename)
+	fhandler, _ := os.Create(dfile)
+	defer fhandler.Close()
+	//log.Printf("url: %s, dir: %s, filename: %s\n", url, dir, filename)
 	writer = io.MultiWriter(resp, fhandler)
 	return writer
 }
@@ -79,6 +87,7 @@ func (h *Handler) modifyRequest(req *http.Request) {
 		req.URL.Scheme = "https"
 	}
 	req.Header.Set("Accept-Encoding", "deflate")
+	req.Header.Set("Connection", "close")
 	req.URL.Host = aRecord
 	req.RequestURI = ""
 }
