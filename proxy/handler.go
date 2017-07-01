@@ -70,7 +70,7 @@ func (h *Handler) archiver(resp http.ResponseWriter, req *http.Request) io.Write
 	}
 
 	fhandler, _ := os.Create(dfile)
-	defer fhandler.Close()
+	//defer fhandler.Close()
 	//log.Printf("url: %s, dir: %s, filename: %s\n", url, dir, filename)
 	writer = io.MultiWriter(resp, fhandler)
 	return writer
