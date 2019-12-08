@@ -5,15 +5,15 @@ import (
 	"log"
 
 	"github.com/miekg/dns"
-	"github.com/millken/raphanus"
+	"github.com/millken/gocache"
 )
 
-var dnscache = raphanus.New(8)
 
 func (h *Handler) queryDNS(domain string) (string, error) {
-	var value string
-	if value, err := dnscache.GetStr(domain); err == nil {
-		return value, err
+	var val string
+	value, ok := gocache.Get(domain)
+	if ok {
+		return value.(string), nil
 	}
 	m1 := new(dns.Msg)
 	m1.Id = dns.Id()
@@ -33,8 +33,8 @@ func (h *Handler) queryDNS(domain string) (string, error) {
 	}
 	if t, ok := in.Answer[len(in.Answer)-1].(*dns.A); ok {
 		log.Printf("domain: %s => %s\n", domain, t.A.String())
-		value = t.A.String()
-		dnscache.SetStr(domain, value, 600)
+		val = t.A.String()
+		gocache.Set(domain, val, 600)
 	}
-	return value, nil
+	return val, nil
 }
