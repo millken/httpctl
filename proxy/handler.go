@@ -1,6 +1,8 @@
 package proxy
 
 import (
+	"bytes"
+	"compress/gzip"
 	"crypto/tls"
 	"fmt"
 	"io"
@@ -13,6 +15,7 @@ import (
 
 type Handler struct {
 	resolver string
+	buf      *bytes.Buffer
 }
 
 func (h *Handler) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
@@ -40,12 +43,31 @@ func (h *Handler) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 			resp.Header().Set(k, strings.Join(v, ""))
 		}
 	}
+	var buffer *bytes.Buffer
+	buffer = nil
 	if tres.StatusCode == 200 {
+		buffer = BufferPool4k.Get()
+		h.buf = buffer
 		writer = h.archiver(resp, req)
 	} else {
 		writer = resp
 	}
-	io.Copy(writer, tres.Body)
+	_, _ = io.Copy(writer, tres.Body)
+	if buffer != nil {
+		zr, err := gzip.NewReader(buffer)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		if _, err := io.Copy(os.Stdout, zr); err != nil {
+			log.Fatal(err)
+		}
+
+		if err := zr.Close(); err != nil {
+			log.Fatal(err)
+		}
+		//log.Printf("\n%s\n", buffer.Bytes())
+	}
 }
 
 func (h *Handler) archiver(resp http.ResponseWriter, req *http.Request) io.Writer {
@@ -69,14 +91,15 @@ func (h *Handler) archiver(resp http.ResponseWriter, req *http.Request) io.Write
 
 	}
 
-	fhandler, _ := os.Create(dfile)
+	//fhandler, _ := os.Create(dfile)
 	//defer fhandler.Close()
 	//log.Printf("url: %s, dir: %s, filename: %s\n", url, dir, filename)
-	writer = io.MultiWriter(resp, fhandler)
+	writer = io.MultiWriter(resp, h.buf)
 	return writer
 }
 
 func (h *Handler) modifyRequest(req *http.Request) {
+	log.Printf("req: %v", req)
 	aRecord, err := h.queryDNS(req.Host)
 	if err != nil {
 		log.Printf("queryDNS err: %s\n", err)
@@ -86,8 +109,8 @@ func (h *Handler) modifyRequest(req *http.Request) {
 	} else {
 		req.URL.Scheme = "https"
 	}
-	req.Header.Set("Accept-Encoding", "deflate")
-	req.Header.Set("Connection", "close")
+	//req.Header.Set("Accept-Encoding", "deflate")
+	//req.Header.Set("Connection", "close")
 	req.URL.Host = aRecord
 	req.RequestURI = ""
 }

@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"sync"
 
-	"github.com/millken/downloader/proxy"
+	"github.com/millken/httpctl/proxy"
 )
 
 const version = "1.0.0"
