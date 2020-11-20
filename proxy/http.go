@@ -2,33 +2,43 @@ package proxy
 
 import (
 	"bytes"
+	"context"
 	"crypto/tls"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"strings"
 
+	"github.com/millken/httpctl/log"
+
 	"github.com/millken/httpctl/resolver"
+	"go.uber.org/zap"
 )
 
 type HttpProxy struct {
 	resolver *resolver.Resolver
 	buffer   *bytes.Buffer
+	log      *zap.Logger
 }
 
 func NewHttpProxy(resolver *resolver.Resolver) *HttpProxy {
 	p := &HttpProxy{
 		resolver: resolver,
 		buffer:   BufferPool4k.Get(),
+		log:      log.Logger("http"),
 	}
 	return p
 }
 
-func (p *HttpProxy) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
+func (p *HttpProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var writer io.Writer
-
-	p.modifyRequest(req)
+	var buffer *bytes.Buffer
+	req, err := p.modifyRequest(r)
+	if err != nil {
+		p.log.Error("modify request", zap.Error(err))
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 	client := &http.Client{
 		Transport: &http.Transport{
 			TLSClientConfig: &tls.Config{
@@ -38,24 +48,30 @@ func (p *HttpProxy) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 	}
 	tres, err := client.Do(req)
 	if err != nil {
-		log.Printf("http client : %s", err)
-		fmt.Fprintf(resp, "http client : %s", err)
+		p.log.Error("client do request", zap.Error(err))
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	defer tres.Body.Close()
 	for k, v := range tres.Header {
 		if len(v) < 2 {
-			resp.Header().Set(k, v[0])
+			w.Header().Set(k, v[0])
 		} else {
-			resp.Header().Set(k, strings.Join(v, ""))
+			w.Header().Set(k, strings.Join(v, ""))
 		}
 	}
-	if tres.StatusCode == 200 {
-		writer = resp
-	} else {
-		writer = resp
+	buffer = BufferPool4k.Get()
+	writer = io.MultiWriter(w, buffer)
+
+	proxyCtx := &proxyContext{
+		Request: req,
+		Buffer:  buffer,
 	}
+	mirr := newMirror(proxyCtx)
+
 	_, _ = io.Copy(writer, tres.Body)
+	mirr.Work()
+	BufferPool4k.Put(buffer)
 	// if p.buffer != nil {
 	// 	zr, err := gzip.NewReader(p.buffer)
 	// 	if err != nil {
@@ -73,11 +89,11 @@ func (p *HttpProxy) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 	// }
 }
 
-func (p *HttpProxy) modifyRequest(req *http.Request) {
-	//log.Printf("req: %v", req)
+func (p *HttpProxy) modifyRequest(r *http.Request) (*http.Request, error) {
+	req := r.Clone(context.Background())
 	ips, err := p.resolver.Get(req.Host)
 	if err != nil {
-		log.Printf("domain %s resolver err: %s\n", req.Host, err)
+		return nil, fmt.Errorf("domain %s resolver err: %s", req.Host, err)
 	}
 	if req.TLS == nil {
 		req.URL.Scheme = "http"
@@ -86,8 +102,10 @@ func (p *HttpProxy) modifyRequest(req *http.Request) {
 	}
 	//req.Header.Set("Accept-Encoding", "deflate")
 	//req.Header.Set("Connection", "close")
+	p.log.Info("resolver get request host", zap.String("host", req.Host), zap.Any("ip", ips))
 	req.URL.Host = ips[0]
 	req.RequestURI = ""
+	return req, nil
 }
 
 func (p *HttpProxy) ListenAndServe(addr string) error {

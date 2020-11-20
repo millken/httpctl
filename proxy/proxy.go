@@ -1,6 +1,13 @@
 package proxy
 
-type Context struct {
+import (
+	"bytes"
+	"net/http"
+)
+
+type proxyContext struct {
+	Request *http.Request
+	Buffer  *bytes.Buffer
 }
 
 type Proxy interface {

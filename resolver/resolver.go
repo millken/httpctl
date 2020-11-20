@@ -3,6 +3,8 @@ package resolver
 import (
 	"context"
 	"errors"
+	"fmt"
+	"net"
 	"sync"
 	"time"
 
@@ -29,22 +31,15 @@ func (item Item) Expired() bool {
 
 type Resolver struct {
 	sync.RWMutex
-	ctx      context.Context
 	resolver string
 	cache    map[string]Item
 }
 
 func NewResolver(resolver string) *Resolver {
 	r := &Resolver{
-		ctx:      context.Background(),
 		resolver: resolver,
 		cache:    make(map[string]Item),
 	}
-	return r
-}
-
-func (r *Resolver) WithContext(ctx context.Context) *Resolver {
-	r.ctx = ctx
 	return r
 }
 
@@ -57,8 +52,7 @@ func (r *Resolver) Get(host string) ([]string, error) {
 	}
 	r.RUnlock()
 
-	ctx, _ := context.WithTimeout(r.ctx, ResolverTimeout)
-	return r.lookupHost(ctx, host)
+	return r.lookupHost(host)
 }
 
 func (r *Resolver) deleteExpired() {
@@ -71,23 +65,7 @@ func (r *Resolver) deleteExpired() {
 	r.Unlock()
 }
 
-func (r *Resolver) Refresh() {
-	i := 0
-	r.RLock()
-	addresses := make([]string, len(r.cache))
-	for key, _ := range r.cache {
-		addresses[i] = key
-		i++
-	}
-	r.RUnlock()
-
-	for _, host := range addresses {
-		ctx, _ := context.WithTimeout(r.ctx, ResolverTimeout)
-		r.lookupHost(ctx, host)
-	}
-}
-
-func (r *Resolver) lookupHost(ctx context.Context, host string) ([]string, error) {
+func (r *Resolver) lookupHost(host string) ([]string, error) {
 	m1 := new(dns.Msg)
 	m1.Id = dns.Id()
 	m1.RecursionDesired = true
@@ -95,6 +73,7 @@ func (r *Resolver) lookupHost(ctx context.Context, host string) ([]string, error
 	m1.Question[0] = dns.Question{dns.Fqdn(host), dns.TypeA, dns.ClassINET}
 
 	c := new(dns.Client)
+	ctx, _ := context.WithTimeout(context.Background(), ResolverTimeout)
 	in, _, err := c.ExchangeContext(ctx, m1, r.resolver+":53")
 
 	if err != nil {
@@ -105,26 +84,28 @@ func (r *Resolver) lookupHost(ctx context.Context, host string) ([]string, error
 	if l == 0 {
 		return nil, errors.New(" answer has empty")
 	}
-	ips := make([]string, l)
+	ips := []string{}
 	for i := 0; i < l; i++ {
-		if t, ok := in.Answer[i].(*dns.A); ok {
-			ips[i] = t.A.String()
+		switch in.Answer[i].(type) {
+		case *dns.A:
+			a := in.Answer[i].(*dns.A)
+			ips = append(ips, a.A.String())
+		case *dns.CNAME:
+			cname := in.Answer[i].(*dns.CNAME)
+			ipa, _ := net.LookupIP(cname.Target)
+			for _, ip := range ipa {
+				if ipv4 := ip.To4(); ipv4 != nil {
+					ips = append(ips, ipv4.String())
+				}
+			}
 		}
 	}
-	return ips, nil
-}
 
-func (r *Resolver) autoDeleteExpired() {
-	rate := time.Second * 1
-	timer := time.NewTimer(rate)
-	for {
-		select {
-		case <-r.ctx.Done():
-			timer.Stop()
-			return
-		case <-timer.C:
-			r.deleteExpired()
-			timer.Reset(rate)
-		}
+	if len(ips) == 0 {
+		return nil, fmt.Errorf("in.Answer : %v", in.Answer)
 	}
+	r.Lock()
+	r.cache[host] = Item{ips, time.Now().Add(DefaultExpiration).UnixNano()}
+	r.Unlock()
+	return ips, nil
 }

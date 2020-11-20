@@ -13,7 +13,7 @@ import (
 const version = "2.0.0"
 
 const (
-	defaultResolver = `8.8.8.8`
+	defaultResolver = `114.114.114.114`
 	defaultAddress  = `127.0.0.1`
 	defaultPort     = uint(80)
 	defaultSSLPort  = uint(443)
