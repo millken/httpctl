@@ -4,16 +4,16 @@ import (
 	"flag"
 	"fmt"
 	"log"
-	"net/http"
 	"sync"
 
 	"github.com/millken/httpctl/proxy"
+	"github.com/millken/httpctl/resolver"
 )
 
-const version = "1.0.0"
+const version = "2.0.0"
 
 const (
-	defaultResolver = `192.168.1.1`
+	defaultResolver = `8.8.8.8`
 	defaultAddress  = `127.0.0.1`
 	defaultPort     = uint(80)
 	defaultSSLPort  = uint(443)
@@ -29,17 +29,20 @@ var (
 )
 
 func main() {
-	log.Printf("HttpCtl v%s // by millken\n", version)
+	log.Printf("httpctl v%s // by millken\n", version)
 	flag.Parse()
 
-	handler := proxy.NewHandler(*flagResolver)
+	var proxyer proxy.Proxy
+	resolvers := resolver.NewResolver(*flagResolver)
+	proxyer = proxy.NewHttpProxy(resolvers)
+	//handler := proxy.NewHandler(*flagResolver)
 
 	var wg sync.WaitGroup
 
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		if err := http.ListenAndServe(fmt.Sprintf("%s:%d", *flagAddress, *flagPort), handler); err != nil {
+		if err := proxyer.ListenAndServe(fmt.Sprintf("%s:%d", *flagAddress, *flagPort)); err != nil {
 			log.Fatalf("Failed to bind on the given interface (HTTP): ", err)
 		}
 
@@ -48,7 +51,7 @@ func main() {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		if err := http.ListenAndServeTLS(fmt.Sprintf("%s:%d", *flagAddress, *flagSSLPort), *flagSSLCertFile, *flagSSLKeyFile, handler); err != nil {
+		if err := proxyer.ListenAndServeTLS(fmt.Sprintf("%s:%d", *flagAddress, *flagSSLPort), *flagSSLCertFile, *flagSSLKeyFile); err != nil {
 			log.Fatalf("Failed to bind on the given interface (HTTPS): ", err)
 		}
 	}()

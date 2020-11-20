@@ -1,10 +1,12 @@
-package proxy
+package resolver
 
 import (
 	"context"
-	"net"
+	"errors"
 	"sync"
 	"time"
+
+	"github.com/miekg/dns"
 )
 
 var (
@@ -32,14 +34,11 @@ type Resolver struct {
 	cache    map[string]Item
 }
 
-func NewResolver(resolver string, refreshRate time.Duration) *Resolver {
+func NewResolver(resolver string) *Resolver {
 	r := &Resolver{
 		ctx:      context.Background(),
 		resolver: resolver,
 		cache:    make(map[string]Item),
-	}
-	if refreshRate > 0 {
-		go r.autoRefresh(refreshRate)
 	}
 	return r
 }
@@ -59,21 +58,10 @@ func (r *Resolver) Get(host string) ([]string, error) {
 	r.RUnlock()
 
 	ctx, _ := context.WithTimeout(r.ctx, ResolverTimeout)
-	return r.Lookup(ctx, host)
+	return r.lookupHost(ctx, host)
 }
 
-func (r *Resolver) get(host string) (ips []string, isCached bool, cacheExpiration int64) {
-	r.RLock()
-	item, isCached := r.cache[host]
-	if isCached {
-		ips = item.Object
-		cacheExpiration = item.Expiration
-	}
-	r.RUnlock()
-	return
-}
-
-func (r *Resolver) Refresh() {
+func (r *Resolver) deleteExpired() {
 	r.Lock()
 	for k, v := range r.cache {
 		if v.Expired() {
@@ -81,7 +69,9 @@ func (r *Resolver) Refresh() {
 		}
 	}
 	r.Unlock()
+}
 
+func (r *Resolver) Refresh() {
 	i := 0
 	r.RLock()
 	addresses := make([]string, len(r.cache))
@@ -93,32 +83,39 @@ func (r *Resolver) Refresh() {
 
 	for _, host := range addresses {
 		ctx, _ := context.WithTimeout(r.ctx, ResolverTimeout)
-		r.Lookup(ctx, host)
+		r.lookupHost(ctx, host)
 	}
 }
 
-func (r *Resolver) Lookup(ctx context.Context, host string) ([]string, error) {
-	rr := &net.Resolver{
-		PreferGo: true,
-		Dial: func(ctx context.Context, network, address string) (net.Conn, error) {
-			d := net.Dialer{
-				Timeout: time.Millisecond * time.Duration(10000),
-			}
-			return d.DialContext(ctx, "udp", r.resolver+":53")
-		},
-	}
-	ips, err := rr.LookupHost(ctx, host)
+func (r *Resolver) lookupHost(ctx context.Context, host string) ([]string, error) {
+	m1 := new(dns.Msg)
+	m1.Id = dns.Id()
+	m1.RecursionDesired = true
+	m1.Question = make([]dns.Question, 1)
+	m1.Question[0] = dns.Question{dns.Fqdn(host), dns.TypeA, dns.ClassINET}
+
+	c := new(dns.Client)
+	in, _, err := c.ExchangeContext(ctx, m1, r.resolver+":53")
+
 	if err != nil {
 		return nil, err
 	}
 
-	r.Lock()
-	r.cache[host] = Item{ips, time.Now().Add(DefaultExpiration).UnixNano()}
-	r.Unlock()
+	l := len(in.Answer)
+	if l == 0 {
+		return nil, errors.New(" answer has empty")
+	}
+	ips := make([]string, l)
+	for i := 0; i < l; i++ {
+		if t, ok := in.Answer[i].(*dns.A); ok {
+			ips[i] = t.A.String()
+		}
+	}
 	return ips, nil
 }
 
-func (r *Resolver) autoRefresh(rate time.Duration) {
+func (r *Resolver) autoDeleteExpired() {
+	rate := time.Second * 1
 	timer := time.NewTimer(rate)
 	for {
 		select {
@@ -126,7 +123,7 @@ func (r *Resolver) autoRefresh(rate time.Duration) {
 			timer.Stop()
 			return
 		case <-timer.C:
-			r.Refresh()
+			r.deleteExpired()
 			timer.Reset(rate)
 		}
 	}
