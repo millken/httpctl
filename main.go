@@ -29,7 +29,7 @@ var (
 )
 
 func main() {
-	log.Printf("Downlader v%s // by millken\n", version)
+	log.Printf("HttpCtl v%s // by millken\n", version)
 	flag.Parse()
 
 	handler := proxy.NewHandler(*flagResolver)
