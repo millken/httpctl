@@ -2,6 +2,7 @@ package proxy
 
 import (
 	"bytes"
+	"compress/gzip"
 	"context"
 	"crypto/tls"
 	"fmt"
@@ -9,6 +10,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/andybalholm/brotli"
 	"github.com/millken/httpctl/log"
 
 	"github.com/millken/httpctl/resolver"
@@ -46,47 +48,69 @@ func (p *HttpProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			},
 		},
 	}
-	tres, err := client.Do(req)
+	response, err := client.Do(req)
 	if err != nil {
 		p.log.Error("client do request", zap.Error(err))
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	defer tres.Body.Close()
-	for k, v := range tres.Header {
+	defer response.Body.Close()
+	for k, v := range response.Header {
 		if len(v) < 2 {
 			w.Header().Set(k, v[0])
 		} else {
 			w.Header().Set(k, strings.Join(v, ""))
 		}
 	}
+
 	buffer = BufferPool4k.Get()
 	writer = io.MultiWriter(w, buffer)
 
-	proxyCtx := &proxyContext{
-		Request: req,
-		Buffer:  buffer,
+	_, _ = io.Copy(writer, response.Body)
+	var reader io.Reader
+	switch response.Header.Get("Content-Encoding") {
+	case "br":
+		reader = brotli.NewReader(buffer)
+	case "gzip":
+		reader, err = gzip.NewReader(buffer)
+		if err != nil {
+			p.log.Error("gzip.NewReader", zap.Error(err))
+		}
+	default:
+		reader = buffer
 	}
-	mirr := newMirror(proxyCtx)
+	//io.Copy(os.Stdout, reader)
+	reqHeader := &RequestHeader{}
+	reqHeader.SetHost(req.Host)
+	reqHeader.SetRequestURI(req.URL.RequestURI())
+	reqHeader.SetMethod(req.Method)
+	reqHeader.SetUserAgent(req.UserAgent())
+	reqHeader.SetContentType(req.Header.Get("Content-Type"))
+	if req.Header.Get("Connection") == "close" {
+		reqHeader.SetConnectionClose()
+	}
+	if req.URL.Scheme == "https" {
+		reqHeader.SetHTTPS()
+	}
+	resHeader := &ResponseHeader{}
+	resHeader.SetContentType(response.Header.Get("Content-Type"))
 
-	_, _ = io.Copy(writer, tres.Body)
-	mirr.Work()
+	proxyCtx := &Context{
+		RequestHeader:  reqHeader,
+		ResponseHeader: resHeader,
+		ResponseBody:   reader,
+	}
+	p.log.Info("origin request header", zap.String("req", fmt.Sprintf("%+v", req)))
+
+	p.log.Info("proxyCtx",
+		zap.Bool("https", proxyCtx.RequestHeader.GetHTTPS()),
+		zap.ByteString("Content-Type", proxyCtx.ResponseHeader.ContentType()),
+		zap.ByteString("host", proxyCtx.RequestHeader.Host()),
+		zap.ByteString("method", proxyCtx.RequestHeader.Method()),
+		zap.ByteString("url", proxyCtx.RequestHeader.RequestURI()),
+	)
 	BufferPool4k.Put(buffer)
-	// if p.buffer != nil {
-	// 	zr, err := gzip.NewReader(p.buffer)
-	// 	if err != nil {
-	// 		log.Fatal(err)
-	// 	}
 
-	// 	if _, err := io.Copy(os.Stdout, zr); err != nil {
-	// 		log.Fatal(err)
-	// 	}
-
-	// 	if err := zr.Close(); err != nil {
-	// 		log.Fatal(err)
-	// 	}
-	// 	//log.Printf("\n%s\n", buffer.Bytes())
-	// }
 }
 
 func (p *HttpProxy) modifyRequest(r *http.Request) (*http.Request, error) {
