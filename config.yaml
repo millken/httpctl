@@ -1,0 +1,30 @@
+server:
+  resolver: 114.114.114.114
+  http:
+    listen: 127.0.0.1:80
+  https:
+    listen: 127.0.0.1:443
+    keyFile: ./ssl/key.pem
+    certFile: ./ssl/cert.pem
+# log:
+#   zap:
+#     development: true
+#     level: info
+#     encoding: console
+#     disableCaller: false
+#     disableStacktrace: false
+#     outputPaths: ["stderr"]
+#     errorOutputPaths: ["stderr"]
+#   stdLogRedirect: true    
+# subLogs:
+#   executor:
+#     zap:
+#       development: true
+#       level: debug
+#       encoding: json    
+#       disableCaller: false
+#       disableStacktrace: false
+#       outputPaths: ["stderr"]
+executor:
+  example: 
+    enable: true

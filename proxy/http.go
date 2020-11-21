@@ -11,6 +11,8 @@ import (
 	"strings"
 
 	"github.com/andybalholm/brotli"
+	"github.com/millken/httpctl/core"
+	"github.com/millken/httpctl/executor"
 	"github.com/millken/httpctl/log"
 
 	"github.com/millken/httpctl/resolver"
@@ -18,13 +20,15 @@ import (
 )
 
 type HttpProxy struct {
+	execute  *executor.Execute
 	resolver *resolver.Resolver
 	buffer   *bytes.Buffer
 	log      *zap.Logger
 }
 
-func NewHttpProxy(resolver *resolver.Resolver) *HttpProxy {
+func NewHttpProxy(resolver *resolver.Resolver, execute *executor.Execute) *HttpProxy {
 	p := &HttpProxy{
+		execute:  execute,
 		resolver: resolver,
 		buffer:   BufferPool4k.Get(),
 		log:      log.Logger("http"),
@@ -80,7 +84,7 @@ func (p *HttpProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		reader = buffer
 	}
 	//io.Copy(os.Stdout, reader)
-	reqHeader := &RequestHeader{}
+	reqHeader := &core.RequestHeader{}
 	reqHeader.SetHost(req.Host)
 	reqHeader.SetRequestURI(req.URL.RequestURI())
 	reqHeader.SetMethod(req.Method)
@@ -92,15 +96,16 @@ func (p *HttpProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if req.URL.Scheme == "https" {
 		reqHeader.SetHTTPS()
 	}
-	resHeader := &ResponseHeader{}
+	resHeader := &core.ResponseHeader{}
 	resHeader.SetContentType(response.Header.Get("Content-Type"))
 
-	proxyCtx := &Context{
+	proxyCtx := &core.Context{
 		RequestHeader:  reqHeader,
 		ResponseHeader: resHeader,
 		ResponseBody:   reader,
 	}
-	p.log.Info("origin request header", zap.String("req", fmt.Sprintf("%+v", req)))
+	p.execute.Handler(proxyCtx)
+	p.log.Debug("origin request header", zap.String("req", fmt.Sprintf("%+v", req)))
 
 	p.log.Info("proxyCtx",
 		zap.Bool("https", proxyCtx.RequestHeader.GetHTTPS()),
@@ -126,7 +131,7 @@ func (p *HttpProxy) modifyRequest(r *http.Request) (*http.Request, error) {
 	}
 	//req.Header.Set("Accept-Encoding", "deflate")
 	//req.Header.Set("Connection", "close")
-	p.log.Info("resolver get request host", zap.String("host", req.Host), zap.Any("ip", ips))
+	p.log.Debug("resolver request host", zap.String("host", req.Host), zap.Any("ip", ips))
 	req.URL.Host = ips[0]
 	req.RequestURI = ""
 	return req, nil
