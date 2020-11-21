@@ -2,18 +2,11 @@ package proxy
 
 import (
 	"crypto/tls"
-	"io"
 	"net"
 	"net/http"
 	"runtime"
 	"time"
 )
-
-type Context struct {
-	RequestHeader  *RequestHeader
-	ResponseHeader *ResponseHeader
-	ResponseBody   io.Reader
-}
 
 type Proxy interface {
 	ListenAndServe(addr string) error

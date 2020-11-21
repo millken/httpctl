@@ -19,18 +19,18 @@ import (
 )
 
 type HttpProxy struct {
-	execute  *executor.Execute
-	resolver *resolver.Resolver
-	buffer   *bytes.Buffer
-	log      *zap.Logger
+	execute    *executor.Execute
+	resolver   *resolver.Resolver
+	bufferPool *core.BufferPool
+	log        *zap.Logger
 }
 
 func NewHttpProxy(resolver *resolver.Resolver, execute *executor.Execute) *HttpProxy {
 	p := &HttpProxy{
-		execute:  execute,
-		resolver: resolver,
-		buffer:   BufferPool4k.Get(),
-		log:      log.Logger("http"),
+		execute:    execute,
+		resolver:   resolver,
+		bufferPool: core.BufferPool4k,
+		log:        log.Logger("http"),
 	}
 	return p
 }
@@ -66,7 +66,7 @@ func (p *HttpProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	buffer = BufferPool4k.Get()
+	buffer = p.bufferPool.Get()
 	writer = io.MultiWriter(w, buffer)
 
 	_, _ = io.Copy(writer, response.Body)
@@ -113,7 +113,7 @@ func (p *HttpProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		zap.ByteString("method", proxyCtx.RequestHeader.Method()),
 		zap.ByteString("url", proxyCtx.RequestHeader.RequestURI()),
 	)
-	BufferPool4k.Put(buffer)
+	p.bufferPool.Put(buffer)
 
 }
 
