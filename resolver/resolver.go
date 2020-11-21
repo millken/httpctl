@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"strings"
 	"sync"
 	"time"
 
@@ -66,6 +67,10 @@ func (r *Resolver) deleteExpired() {
 }
 
 func (r *Resolver) lookupHost(host string) ([]string, error) {
+	idx := strings.Index(host, ":")
+	if idx > -1 {
+		host = host[:idx]
+	}
 	m1 := new(dns.Msg)
 	m1.Id = dns.Id()
 	m1.RecursionDesired = true

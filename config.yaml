@@ -6,16 +6,16 @@ server:
     listen: 127.0.0.1:443
     keyFile: ./ssl/key.pem
     certFile: ./ssl/cert.pem
-# log:
-#   zap:
-#     development: true
-#     level: info
-#     encoding: console
-#     disableCaller: false
-#     disableStacktrace: false
-#     outputPaths: ["stderr"]
-#     errorOutputPaths: ["stderr"]
-#   stdLogRedirect: true    
+log:
+  zap:
+    development: true
+    level: debug
+    encoding: console
+    disableCaller: false
+    disableStacktrace: false
+    outputPaths: ["stderr"]
+    errorOutputPaths: ["stderr"]
+  stdLogRedirect: true    
 # subLogs:
 #   executor:
 #     zap:

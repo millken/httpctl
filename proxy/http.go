@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
-	"crypto/tls"
 	"fmt"
 	"io"
 	"net/http"
@@ -46,12 +45,12 @@ func (p *HttpProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	client := &http.Client{
-		Transport: &http.Transport{
-			TLSClientConfig: &tls.Config{
-				InsecureSkipVerify: true,
-			},
+		Transport: createTransport(nil),
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			return http.ErrUseLastResponse
 		},
 	}
+
 	response, err := client.Do(req)
 	if err != nil {
 		p.log.Error("client do request", zap.Error(err))
