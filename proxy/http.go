@@ -97,22 +97,11 @@ func (p *HttpProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	resHeader := &core.ResponseHeader{}
 	resHeader.SetContentType(response.Header.Get("Content-Type"))
+	resHeader.SetStatusCode(response.StatusCode)
 
-	proxyCtx := &core.Context{
-		RequestHeader:  reqHeader,
-		ResponseHeader: resHeader,
-		ResponseBody:   reader,
-	}
-	p.execute.Handler(proxyCtx)
-	p.log.Debug("origin request header", zap.String("req", fmt.Sprintf("%+v", req)))
+	copyWriter := io.MultiWriter(p.execute.Writer(reqHeader, resHeader)...)
 
-	p.log.Info("proxyCtx",
-		zap.Bool("https", proxyCtx.RequestHeader.GetHTTPS()),
-		zap.ByteString("Content-Type", proxyCtx.ResponseHeader.ContentType()),
-		zap.ByteString("host", proxyCtx.RequestHeader.Host()),
-		zap.ByteString("method", proxyCtx.RequestHeader.Method()),
-		zap.ByteString("url", proxyCtx.RequestHeader.RequestURI()),
-	)
+	io.Copy(copyWriter, reader)
 	p.bufferPool.Put(buffer)
 
 }

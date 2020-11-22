@@ -33,8 +33,14 @@ type (
 	ExampleExecutor struct {
 		Enable bool `yaml:"enable" json:"enable"`
 	}
+	SiteCopyExecutor struct {
+		Enable     bool     `yaml:"enable" json:"enable"`
+		Hosts      []string `yaml:"hosts" json:"hosts"`
+		OutputPath string   `yaml:"outputPath" json:"outputPath"`
+	}
 	Executor struct {
-		Example ExampleExecutor `yaml:"example" json:"example"`
+		Example  ExampleExecutor  `yaml:"example" json:"example"`
+		SiteCopy SiteCopyExecutor `yaml:"sitecopy" json:"sitecopy"`
 	}
 	Config struct {
 		Server   Server                      `yaml:"server" json:"server"`

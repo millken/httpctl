@@ -287,3 +287,16 @@ func (h *ResponseHeader) SetServer(server string) {
 func (h *ResponseHeader) SetServerBytes(server []byte) {
 	h.server = append(h.server[:0], server...)
 }
+
+// StatusCode returns response status code.
+func (h *ResponseHeader) StatusCode() int {
+	if h.statusCode == 0 {
+		return StatusOK
+	}
+	return h.statusCode
+}
+
+// SetStatusCode sets response status code.
+func (h *ResponseHeader) SetStatusCode(statusCode int) {
+	h.statusCode = statusCode
+}

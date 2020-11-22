@@ -39,8 +39,7 @@ func main() {
 	log.L().Info("loading config", zap.Any("config", fmt.Sprintf("%+v", cfg)))
 
 	ctx := context.Background()
-	execute := executor.NewExecutor(cfg.Executor)
-	execute.Start(ctx)
+	execute := executor.NewExecutor(ctx, cfg.Executor)
 
 	var proxyer proxy.Proxy
 	resolvers := resolver.NewResolver(cfg.Server.Resolver)

@@ -27,4 +27,8 @@ log:
 #       outputPaths: ["stderr"]
 executor:
   example: 
+    enable: false
+  sitecopy:
     enable: true
+    hosts: ["fuzuo.ruiyukeji.top"]
+    outputPath: "archives/"
