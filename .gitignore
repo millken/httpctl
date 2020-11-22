@@ -17,3 +17,5 @@ vendor/
 bin/
 archives
 httpctl
+sites
+/test/

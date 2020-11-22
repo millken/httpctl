@@ -28,10 +28,13 @@ func NewExecutor(ctx context.Context, cfg config.Executor) *Execute {
 		executors: []Executor{},
 	}
 	if cfg.Example.Enable {
-		e.executors = append(e.executors, newExampleExecutor(cfg.Example))
+		e.executors = append(e.executors, newExampleExecutor(ctx, cfg.Example))
 	}
 	if cfg.SiteCopy.Enable {
-		e.executors = append(e.executors, newSiteCopyExecutor(cfg.SiteCopy))
+		e.executors = append(e.executors, newSiteCopyExecutor(ctx, cfg.SiteCopy))
+	}
+	if cfg.SourceMap.Enable {
+		e.executors = append(e.executors, newSourceMapExecutor(ctx, cfg.SourceMap))
 	}
 	return e
 }

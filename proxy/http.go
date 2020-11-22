@@ -45,7 +45,7 @@ func (p *HttpProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	client := &http.Client{
-		Transport: createTransport(nil),
+		Transport: core.CreateHTTPTransport(nil),
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			return http.ErrUseLastResponse
 		},

@@ -2,6 +2,7 @@ package executor
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -19,7 +20,7 @@ type SiteCopyExecutor struct {
 	log *zap.Logger
 }
 
-func newSiteCopyExecutor(cfg config.SiteCopyExecutor) Executor {
+func newSiteCopyExecutor(ctx context.Context, cfg config.SiteCopyExecutor) Executor {
 	return &SiteCopyExecutor{
 		cfg: cfg,
 		log: log.Logger("sitecopy_executor"),
@@ -38,8 +39,7 @@ func (e *SiteCopyExecutor) Writer(req *core.RequestHeader, resHeader *core.Respo
 		return nil
 	}
 	url := append(req.Host(), string(req.RequestURI())...)
-	fmt.Printf("host = %s, uri = %s, method=%s", req.Host(), url, req.Method())
-	dir, filename := filepath.Split(string(url))
+	dir, filename := filepath.Split(filepath.Clean(string(url)))
 	if filename == "" {
 		filename = "index.html"
 	}
@@ -51,7 +51,7 @@ func (e *SiteCopyExecutor) Writer(req *core.RequestHeader, resHeader *core.Respo
 	}
 	stat, err := os.Stat(dir)
 	if os.IsNotExist(err) || !stat.IsDir() {
-		if err = os.MkdirAll(dir, 0644); err != nil {
+		if err = os.MkdirAll(dir, 0700); err != nil {
 			e.log.Error("can not mkdir", zap.String("dir", dir), zap.Error(err))
 			return nil
 		}
@@ -62,5 +62,6 @@ func (e *SiteCopyExecutor) Writer(req *core.RequestHeader, resHeader *core.Respo
 		e.log.Error("can not create file", zap.String("file", dfile), zap.Error(err))
 		return nil
 	}
+	e.log.Info("generate site file", zap.String("file", dfile))
 	return fhandler
 }

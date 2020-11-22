@@ -4,6 +4,7 @@ go 1.14
 
 require (
 	github.com/andybalholm/brotli v1.0.1
+	github.com/go-sourcemap/sourcemap v2.1.3+incompatible
 	github.com/google/brotli/go/cbrotli v0.0.0-20201008125033-fcda9db7fd55
 	github.com/miekg/dns v1.1.35
 	github.com/millken/gocache v1.0.5

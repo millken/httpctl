@@ -28,7 +28,7 @@ log:
 executor:
   example: 
     enable: false
-  sitecopy:
+  sourcemap:
     enable: true
     hosts: ["fuzuo.ruiyukeji.top"]
-    outputPath: "archives/"
+    outputPath: "sites/"

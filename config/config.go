@@ -38,9 +38,15 @@ type (
 		Hosts      []string `yaml:"hosts" json:"hosts"`
 		OutputPath string   `yaml:"outputPath" json:"outputPath"`
 	}
+	SourceMapExecutor struct {
+		Enable     bool     `yaml:"enable" json:"enable"`
+		Hosts      []string `yaml:"hosts" json:"hosts"`
+		OutputPath string   `yaml:"outputPath" json:"outputPath"`
+	}
 	Executor struct {
-		Example  ExampleExecutor  `yaml:"example" json:"example"`
-		SiteCopy SiteCopyExecutor `yaml:"sitecopy" json:"sitecopy"`
+		Example   ExampleExecutor   `yaml:"example" json:"example"`
+		SiteCopy  SiteCopyExecutor  `yaml:"sitecopy" json:"sitecopy"`
+		SourceMap SourceMapExecutor `yaml:"sourcemap" json:"sourcemap"`
 	}
 	Config struct {
 		Server   Server                      `yaml:"server" json:"server"`

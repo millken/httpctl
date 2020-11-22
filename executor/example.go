@@ -1,6 +1,7 @@
 package executor
 
 import (
+	"context"
 	"io"
 	"os"
 
@@ -15,7 +16,7 @@ type ExampleExecutor struct {
 	log *zap.Logger
 }
 
-func newExampleExecutor(cfg config.ExampleExecutor) Executor {
+func newExampleExecutor(ctx context.Context, cfg config.ExampleExecutor) Executor {
 	return &ExampleExecutor{
 		cfg: cfg,
 		log: log.Logger("example_executor"),

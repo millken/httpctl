@@ -1,11 +1,9 @@
 package proxy
 
 import (
-	"crypto/tls"
-	"net"
+	"bytes"
+	"io/ioutil"
 	"net/http"
-	"runtime"
-	"time"
 )
 
 type Proxy interface {
@@ -13,23 +11,24 @@ type Proxy interface {
 	ListenAndServeTLS(addr string, certFile string, keyFile string) error
 }
 
-func createTransport(localAddr net.Addr) *http.Transport {
-	dialer := &net.Dialer{
-		Timeout:   30 * time.Second,
-		KeepAlive: 30 * time.Second,
-		DualStack: true,
+// DuplicateRequest duplicate http request
+func DuplicateRequest(request *http.Request) (dup *http.Request) {
+	var bodyBytes []byte
+	if request.Body != nil {
+		bodyBytes, _ = ioutil.ReadAll(request.Body)
 	}
-	if localAddr != nil {
-		dialer.LocalAddr = localAddr
+	request.Body = ioutil.NopCloser(bytes.NewBuffer(bodyBytes))
+	dup = &http.Request{
+		Method:        request.Method,
+		URL:           request.URL,
+		Proto:         request.Proto,
+		ProtoMajor:    request.ProtoMajor,
+		ProtoMinor:    request.ProtoMinor,
+		Header:        request.Header,
+		Body:          ioutil.NopCloser(bytes.NewBuffer(bodyBytes)),
+		Host:          request.Host,
+		ContentLength: request.ContentLength,
+		Close:         true,
 	}
-	return &http.Transport{
-		Proxy:                 http.ProxyFromEnvironment,
-		DialContext:           dialer.DialContext,
-		MaxIdleConns:          100,
-		IdleConnTimeout:       7 * time.Second,
-		TLSHandshakeTimeout:   10 * time.Second,
-		ExpectContinueTimeout: 1 * time.Second,
-		MaxIdleConnsPerHost:   runtime.GOMAXPROCS(0) + 1,
-		TLSClientConfig:       &tls.Config{InsecureSkipVerify: true},
-	}
+	return
 }
