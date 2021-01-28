@@ -1,12 +1,13 @@
 package executor
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/millken/httpctl/config"
@@ -35,18 +36,26 @@ func (e *SiteCopyExecutor) Writer(req *core.RequestHeader, resHeader *core.Respo
 			break
 		}
 	}
-	if !hit || req.IsPost() || bytes.Contains(req.RequestURI(), []byte("?")) || resHeader.StatusCode() != 200 {
+	if !hit || req.IsPost() || resHeader.StatusCode() != 200 {
+		e.log.Warn("not exist in hosts or http method = post or status = 200")
 		return nil
 	}
-	url := append(req.Host(), string(req.RequestURI())...)
-	dir, filename := filepath.Split(filepath.Clean(string(url)))
+	currentUrl := string(append(req.Host(), string(req.RequestURI())...))
+	u, _ := url.Parse(currentUrl)
+	fixUrl := u.Host + u.Path
+	dir, filename := filepath.Split(filepath.Clean(fixUrl))
 	if filename == "" {
 		filename = "index.html"
 	}
+	if u.RawQuery != "" && sort.SearchStrings([]string{"css", "ttf", "woff"}, filepath.Ext(filename)[1:]) == 3 {
+		e.log.Warn("skip url with query, otherwise css", zap.String("rawQuery", u.RawQuery), zap.String("ext", filepath.Ext(filename)))
+		return nil
+	}
+
 	dir = fmt.Sprintf("%s/%s", e.cfg.OutputPath, dir)
 	dfile := fmt.Sprintf("%s%s", dir, filename)
-	if _, err := os.Stat(dfile); os.IsExist(err) {
-		e.log.Error("can not stat", zap.String("dfile", dfile), zap.Error(err))
+	if stat, err := os.Stat(dfile); !os.IsNotExist(err) && stat.Size() != 0 {
+		e.log.Debug("skip existed file", zap.String("file", dfile), zap.Int64("size", stat.Size()))
 		return nil
 	}
 	stat, err := os.Stat(dir)
