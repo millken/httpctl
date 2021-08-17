@@ -30,9 +30,9 @@ executor:
     enable: false
   sourcemap:
     enable: true
-    hosts: ["fuzuo.ruiyukeji.top"]
+    hosts: ["www.primefaces.org"]
     outputPath: "sites/"
   sitecopy:
-    enable: true
+    enable: false
     hosts: ["htmlstream.com"]
     outputPath: "sites/"

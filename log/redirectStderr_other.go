@@ -5,7 +5,6 @@
 // License 2.0 that can be found in the LICENSE file.
 
 //+build !windows
-//+build !arm,!arm64
 
 package log
 
