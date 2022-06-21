@@ -1,11 +1,10 @@
 server:
-  resolver: 114.114.114.114
+  resolver: 9.9.9.9:9953
   http:
     listen: 127.0.0.1:80
   https:
     listen: 127.0.0.1:443
-    keyFile: ./ssl/key.pem
-    certFile: ./ssl/cert.pem
+  proxy: "socks5://127.0.0.1:1080"
 log:
   zap:
     development: true

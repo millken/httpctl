@@ -3,8 +3,9 @@ package resolver
 import (
 	"context"
 	"errors"
-	"fmt"
+	"math/rand"
 	"net"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -12,12 +13,20 @@ import (
 	"github.com/miekg/dns"
 )
 
+//https://github.com/parrotgeek1/ProxyDNS
+
 var (
-	DefaultExpiration time.Duration = time.Minute * 10
-	ResolverTimeout   time.Duration = time.Second * 7
+	DefaultNameServers               = []string{"8.8.8.8:53", "1.1.1.1:53"}
+	DefaultExpiration  time.Duration = time.Minute * 10
+	ResolverTimeout    time.Duration = time.Second * 7
+)
+var (
+	ErrAnswerEmpty = errors.New("answer is empty")
+	ErrIpEmpty     = errors.New("ip is empty")
 )
 
 type Item struct {
+	Nameserver string
 	Object     []string
 	Expiration int64
 }
@@ -32,28 +41,37 @@ func (item Item) Expired() bool {
 
 type Resolver struct {
 	sync.RWMutex
-	resolver string
-	cache    map[string]Item
+	janitor     *janitor
+	nameservers []string
+	cache       map[string]Item
 }
 
-func NewResolver(resolver string) *Resolver {
-	r := &Resolver{
-		resolver: resolver,
-		cache:    make(map[string]Item),
+func NewResolver(nameservers ...string) *Resolver {
+	if len(nameservers) == 0 {
+		nameservers = DefaultNameServers
 	}
+	r := &Resolver{
+		nameservers: nameservers,
+		cache:       make(map[string]Item),
+	}
+	runJanitor(r, DefaultExpiration/2)
+	runtime.SetFinalizer(r, stopJanitor)
 	return r
 }
 
-func (r *Resolver) Get(host string) ([]string, error) {
+func (r *Resolver) Lookup(host string, nameservers ...string) ([]string, string, error) {
+	if host == "" {
+		return nil, "", errors.New("resolve host is empty")
+	}
 	r.RLock()
 	item, found := r.cache[host]
 	if found && !item.Expired() {
 		r.RUnlock()
-		return item.Object, nil
+		return item.Object, item.Nameserver, nil
 	}
 	r.RUnlock()
 
-	return r.lookupHost(host)
+	return r.lookupHost(host, nameservers...)
 }
 
 func (r *Resolver) deleteExpired() {
@@ -66,8 +84,8 @@ func (r *Resolver) deleteExpired() {
 	r.Unlock()
 }
 
-func (r *Resolver) lookupHost(host string) ([]string, error) {
-	idx := strings.Index(host, ":")
+func (r *Resolver) lookupHost(host string, nameservers ...string) ([]string, string, error) {
+	idx := strings.IndexRune(host, ':')
 	if idx > -1 {
 		host = host[:idx]
 	}
@@ -75,19 +93,31 @@ func (r *Resolver) lookupHost(host string) ([]string, error) {
 	m1.Id = dns.Id()
 	m1.RecursionDesired = true
 	m1.Question = make([]dns.Question, 1)
-	m1.Question[0] = dns.Question{dns.Fqdn(host), dns.TypeA, dns.ClassINET}
+	m1.Question[0] = dns.Question{
+		Name:   dns.Fqdn(host),
+		Qtype:  dns.TypeA,
+		Qclass: dns.ClassINET,
+	}
 
 	c := new(dns.Client)
-	ctx, _ := context.WithTimeout(context.Background(), ResolverTimeout)
-	in, _, err := c.ExchangeContext(ctx, m1, r.resolver+":53")
+	ctx, cancel := context.WithTimeout(context.Background(), ResolverTimeout)
+	defer cancel()
+	if len(nameservers) == 0 {
+		nameservers = r.nameservers
+	}
+	nameserver := nameservers[rand.Intn(len(nameservers))]
+	if !strings.Contains(nameserver, ":") {
+		nameserver += ":53"
+	}
+	in, _, err := c.ExchangeContext(ctx, m1, nameserver)
 
 	if err != nil {
-		return nil, err
+		return nil, nameserver, err
 	}
 
 	l := len(in.Answer)
 	if l == 0 {
-		return nil, errors.New(" answer has empty")
+		return nil, nameserver, ErrAnswerEmpty
 	}
 	ips := []string{}
 	for i := 0; i < l; i++ {
@@ -107,10 +137,14 @@ func (r *Resolver) lookupHost(host string) ([]string, error) {
 	}
 
 	if len(ips) == 0 {
-		return nil, fmt.Errorf("in.Answer : %v", in.Answer)
+		return nil, nameserver, ErrIpEmpty
 	}
 	r.Lock()
-	r.cache[host] = Item{ips, time.Now().Add(DefaultExpiration).UnixNano()}
+	r.cache[host] = Item{
+		Nameserver: nameserver,
+		Object:     ips,
+		Expiration: time.Now().Add(DefaultExpiration).UnixNano(),
+	}
 	r.Unlock()
-	return ips, nil
+	return ips, nameserver, nil
 }

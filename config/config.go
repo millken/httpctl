@@ -21,9 +21,7 @@ type (
 		Listen string `yaml:"listen" json:"listen"`
 	}
 	Https struct {
-		Listen   string `yaml:"listen" json:"listen"`
-		KeyFile  string `yaml:"keyFile" json:"keyFile"`
-		CertFile string `yaml:"certFile" json:"certFile"`
+		Listen string `yaml:"listen" json:"listen"`
 	}
 	Server struct {
 		Http     Http   `yaml:"http" json:"http"`
@@ -43,14 +41,18 @@ type (
 		Hosts      []string `yaml:"hosts" json:"hosts"`
 		OutputPath string   `yaml:"outputPath" json:"outputPath"`
 	}
+	FlowExecutor struct {
+		Enable bool `yaml:"enable" json:"enable"`
+	}
 	Executor struct {
 		Example   ExampleExecutor   `yaml:"example" json:"example"`
 		SiteCopy  SiteCopyExecutor  `yaml:"sitecopy" json:"sitecopy"`
 		SourceMap SourceMapExecutor `yaml:"sourcemap" json:"sourcemap"`
+		Flow      FlowExecutor      `yaml:"flow" json:"flow"`
 	}
 	Config struct {
 		Server   Server                      `yaml:"server" json:"server"`
-		Log      log.GlobalConfig            `yaml:"log" yaml:"log"`
+		Log      log.GlobalConfig            `yaml:"log" json:"log"`
 		SubLogs  map[string]log.GlobalConfig `yaml:"subLogs" json:"subLogs"`
 		Executor Executor                    `yaml:"executor" json:"executor"`
 	}
